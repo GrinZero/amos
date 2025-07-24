@@ -266,7 +266,6 @@ export function useSelector<Rs extends Selectable[]>(...selectors: Rs): MapSelec
     return () => lastStore.current?.disposer();
   }, [store]);
 
-  // TODO: print friendly with selector names
   useDebugValue(selectedState, (value: any[]) => {
     return value.reduce((map, value, index) => {
       const s = selectors[index];
