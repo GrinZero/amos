@@ -3,7 +3,7 @@
  * @author acrazing <joking.young@gmail.com>
  */
 
-import { useContext, useDebugValue, useLayoutEffect, useEffect, useReducer, useRef } from 'react';
+import { useContext, useDebugValue, useLayoutEffect, useEffect, useReducer } from 'react';
 import { __Context } from './context';
 import { Selector } from './selector';
 import { Dispatch, Selectable, Snapshot, Store } from './store';
@@ -160,34 +160,47 @@ function selectorChanged(
  *
  * @param selectors a selectable array
  */
+interface SelectorState {
+  selectorRef: SelectorRef;
+  storeRef: StoreRef | undefined;
+  lastState: unknown[];
+  updateCount: number;
+}
+
+function selectorReducer(state: SelectorState, action: { type: 'UPDATE' }): SelectorState {
+  return { ...state, updateCount: state.updateCount + 1 };
+}
+
 export function useSelector<Rs extends Selectable[]>(...selectors: Rs): MapSelector<Rs> {
   const store = useStore();
 
-  const [, update] = useReducer((s) => s + 1, 0);
-  const lastSelector = useRef<SelectorRef>(defaultSelectorRef);
-  const lastStore = useRef<StoreRef>();
-  const lastState = useRef<unknown[]>([]);
+  const [state, dispatch] = useReducer(selectorReducer, {
+    selectorRef: defaultSelectorRef,
+    storeRef: undefined,
+    lastState: [],
+    updateCount: 0,
+  });
 
-  if (lastStore.current?.store !== store) {
-    lastSelector.current = defaultSelectorRef;
+  if (state.storeRef?.store !== store) {
+    state.selectorRef = defaultSelectorRef;
   }
 
-  if (lastStore.current?.error) {
-    const error = lastStore.current.error;
-    lastStore.current.error = void 0;
+  if (state.storeRef?.error) {
+    const error = state.storeRef.error;
+    state.storeRef.error = void 0;
     throw error;
   }
 
   const resolveState = () => {
-    if (lastStore.current?.updated) {
-      lastStore.current.updated = false;
-      return lastSelector.current.results;
+    if (state.storeRef?.updated) {
+      state.storeRef.updated = false;
+      return state.selectorRef.results;
     } else {
-      if (lastSelector.current === defaultSelectorRef) {
-        lastSelector.current = { selectors: [], deps: [], snapshots: [], results: [] };
+      if (state.selectorRef === defaultSelectorRef) {
+        state.selectorRef = { selectors: [], deps: [], snapshots: [], results: [] };
       }
       // updates from outside
-      const { selectors: oldSelectors, deps, snapshots, results } = lastSelector.current;
+      const { selectors: oldSelectors, deps, snapshots, results } = state.selectorRef;
       for (let i = 0; i < selectors.length; i++) {
         const old = oldSelectors[i];
         const newly = selectors[i];
@@ -214,17 +227,17 @@ export function useSelector<Rs extends Selectable[]>(...selectors: Rs): MapSelec
   let selectedState: any = resolveState();
 
   useIsomorphicLayoutEffect(() => {
-    lastState.current = [...selectedState];
+    state.lastState = [...selectedState];
   });
 
   useIsomorphicLayoutEffect(() => {
-    lastStore.current = {
+    state.storeRef = {
       store,
       updated: false,
       error: void 0,
       disposer: store.subscribe((updatedState) => {
         let i = 0;
-        const { selectors, snapshots, results, deps } = lastSelector.current;
+        const { selectors, snapshots, results, deps } = state.selectorRef;
         const max = selectors.length;
         try {
           for (; i < max; i++) {
@@ -235,35 +248,35 @@ export function useSelector<Rs extends Selectable[]>(...selectors: Rs): MapSelec
                 if (shouldSelectorRecompute(selector, store, deps, i)) {
                   const newSnapshot: Snapshot = {};
                   const newResult = store.select(selector, newSnapshot);
-                  lastStore.current!.updated ||= !compare(selector, results[i], newResult);
+                  state.storeRef!.updated ||= !compare(selector, results[i], newResult);
                   snapshots[i] = newSnapshot;
                   results[i] = newResult;
                 }
               }
             } else if (updatedState.hasOwnProperty(selector.key)) {
               const newState = store.select(selector);
-              lastStore.current!.updated ||= newState !== results[i];
+              state.storeRef!.updated ||= newState !== results[i];
               results[i] = newState;
             }
           }
-          lastStore.current!.updated && update();
+          state.storeRef!.updated && dispatch({ type: 'UPDATE' });
         } catch (e) {
           snapshots.length = results.length = i;
-          lastStore.current!.error =
+          state.storeRef!.error =
             typeof e === 'object' && e && 'message' in e
               ? Object.assign(e, { message: '[Amos] selector throws error: ' + e.message })
               : new Error('[Amos] selector throws falsy error: ' + e);
-          update();
+          dispatch({ type: 'UPDATE' });
         }
       }),
     };
 
     // if something change between render and the effect. eg. dispatch when render
-    if (!arrayEqual(lastState.current, resolveState())) {
-      update();
+    if (!arrayEqual(state.lastState, resolveState())) {
+      dispatch({ type: 'UPDATE' });
     }
 
-    return () => lastStore.current?.disposer();
+    return () => state.storeRef?.disposer();
   }, [store]);
 
   useDebugValue(selectedState, (value: any[]) => {
