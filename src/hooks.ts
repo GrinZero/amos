@@ -167,14 +167,14 @@ interface SelectorState {
   updateCount: number;
 }
 
-function selectorReducer(state: SelectorState, action: { type: 'UPDATE' }): SelectorState {
+function selectorReducer(state: SelectorState): SelectorState {
   return { ...state, updateCount: state.updateCount + 1 };
 }
 
 export function useSelector<Rs extends Selectable[]>(...selectors: Rs): MapSelector<Rs> {
   const store = useStore();
 
-  const [state, dispatch] = useReducer(selectorReducer, {
+  const [state, update] = useReducer(selectorReducer, {
     selectorRef: defaultSelectorRef,
     storeRef: undefined,
     lastState: [],
@@ -259,21 +259,21 @@ export function useSelector<Rs extends Selectable[]>(...selectors: Rs): MapSelec
               results[i] = newState;
             }
           }
-          state.storeRef!.updated && dispatch({ type: 'UPDATE' });
+          state.storeRef!.updated && update();
         } catch (e) {
           snapshots.length = results.length = i;
           state.storeRef!.error =
             typeof e === 'object' && e && 'message' in e
               ? Object.assign(e, { message: '[Amos] selector throws error: ' + e.message })
               : new Error('[Amos] selector throws falsy error: ' + e);
-          dispatch({ type: 'UPDATE' });
+          update();
         }
       }),
     };
 
     // if something change between render and the effect. eg. dispatch when render
     if (!arrayEqual(state.lastState, resolveState())) {
-      dispatch({ type: 'UPDATE' });
+      update();
     }
 
     return () => state.storeRef?.disposer();
