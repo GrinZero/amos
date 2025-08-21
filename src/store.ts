@@ -157,6 +157,13 @@ export let batchedUpdates: SchedulerFn = (cb) => cb();
 
 export type StoreEnhancer = (store: Store) => Store;
 
+let keydownFlag = false;
+
+if (document) {
+  document.addEventListener('keydown', () => (keydownFlag = true));
+  document.addEventListener('keyup', () => (keydownFlag = false));
+}
+
 /**
  * create a store
  * @param preloadedState
@@ -259,7 +266,7 @@ export function createStore(preloadedState?: Snapshot, ...enhancers: StoreEnhanc
         }
       } catch {}
 
-      if (store.isAutoBatch) {
+      if (store.isAutoBatch && !keydownFlag) {
         Promise.resolve().then(flushDispatchQueue);
       } else {
         flushDispatchQueue();
