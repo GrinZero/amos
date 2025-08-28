@@ -34,7 +34,7 @@ export interface Action<R = any, A extends any[] = any[]> {
  *
  * @stable
  */
-export interface ActionFactory<A extends any[], R> {
+export interface ActionFactory<A extends unknown[], R> {
   type: string | undefined;
 
   (...args: A): Action<R, A>;
@@ -55,7 +55,7 @@ export interface ActionFactory<A extends any[], R> {
  *
  * @stable
  */
-export function action<A extends any[], R>(
+export function action<A extends unknown[], R>(
   actor: (dispatch: Dispatch, select: Select, ...args: A) => R,
   type?: string,
 ): ActionFactory<A, R> {
